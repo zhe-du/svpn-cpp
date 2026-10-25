@@ -58,6 +58,8 @@ svpn.exe down
 
 也可以直接双击 **`run.cmd`**：没有 `config.json` 就先 `init`，然后 `up -b`、等 2 秒、打一张 `status`，窗口 `pause` 不闪退。
 
+发布包附 `SHA256SUMS.txt` 与 `RELEASE.txt`：`certutil -hashfile svpn.exe SHA256` 的结果应与 `SHA256SUMS.txt` 里 `svpn.exe` 那行一致；对不上就别运行。
+
 ---
 
 ## 子命令一览（13 个）
