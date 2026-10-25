@@ -199,7 +199,9 @@ void Stats::dump(const Paths& p) const {
     std::error_code ec;
     std::filesystem::create_directories(p.runtime, ec);
     std::FILE* f = nullptr;
-    if (_wfopen_s(&f, p.stats.wstring().c_str(), L"w, ccs=UTF-8") == 0 && f) {
+    // 必须是 "wb"：ccs=UTF-8 是把宽字符流转 UTF-8 的开关，配 fwrite 写窄字节串时
+    // 每两个字节会被当成一个 UTF-16 码元重新编码，落盘就成了乱码 + 只有 BOM 的空文件。
+    if (_wfopen_s(&f, p.stats.wstring().c_str(), L"wb") == 0 && f) {
         std::string text = j.dump(2);
         std::fwrite(text.data(), 1, text.size(), f);
         std::fclose(f);

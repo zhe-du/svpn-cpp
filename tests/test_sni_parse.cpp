@@ -1,7 +1,9 @@
 // T1：parse_client_hello_sni（纯字节解析，攻击面）单元测试。
-// 编译：
-//   g++ -std=c++20 -O2 -static -I src -o tests/test_sni_parse.exe tests/test_sni_parse.cpp \
-//       src/tls.cpp src/net.cpp src/util.cpp src/json.cpp -lws2_32 -lcrypt32 -lsecur32
+// 编译（-Wall -Wextra，本文件必须零警告）：
+//   g++ -std=c++20 -O2 -Wall -Wextra -static -I src -o tests/test_sni_parse.exe
+//       tests/test_sni_parse.cpp src/tls.cpp src/net.cpp src/util.cpp src/json.cpp
+//       -lws2_32 -lcrypt32 -lsecur32
+// 注意：注释行尾不要留反斜杠续行 —— 续行会把下一行也并进注释，触发 -Wcomment。
 //
 // 关键设计：所有样本都放进「末尾贴着 PAGE_NOACCESS 的守卫页」的缓冲区里，
 // 解析器只要多读一个字节就立刻触发访问违例 —— 用 SetUnhandledExceptionFilter

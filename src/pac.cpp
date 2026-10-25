@@ -90,7 +90,7 @@ std::string build_pac(const std::string& host, int port,
     const std::string djs = js_list(direct);
 
     std::string out;
-    out += "// svpn 自动生成，重跑 `svpn pac --write` 覆盖\n";
+    out += "// svpn 自动生成，重跑 `svpn pac` 覆盖\n";
     out += "var SOCK = \"SOCKS5 ";
     out += host;
     out += ':';

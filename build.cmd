@@ -1,5 +1,5 @@
 @echo off
-rem Build svpn.exe (static, zero runtime deps). ASCII only.
+rem Build svpn.exe (console) and svpn-gui.exe (windowed). Static, zero runtime deps. ASCII only.
 setlocal enabledelayedexpansion
 set "ROOT=%~dp0"
 set "CXX=D:\LE\AI\tools\mingw64\bin\g++.exe"
@@ -15,18 +15,26 @@ if "%SRC%"=="" (
     exit /b 2
 )
 
+set "LIBS=-lws2_32 -lcrypt32 -lsecur32 -lwinhttp -ladvapi32 -luser32 -lshell32 -liphlpapi -lole32 -luuid -ldnsapi -lwininet -lcomctl32 -lgdi32"
+set "FLAGS=-std=c++20 -O2 -Wall -Wextra -municode -static -s -finput-charset=UTF-8 -fexec-charset=UTF-8"
+
 echo [i] compiler: %CXX%
-"%CXX%" -std=c++20 -O2 -Wall -Wextra -municode -mconsole -static -s ^
-    -finput-charset=UTF-8 -fexec-charset=UTF-8 ^
-    %SRC% -o svpn.exe ^
-    -lws2_32 -lcrypt32 -lsecur32 -lwinhttp -ladvapi32 -luser32 -lshell32 -liphlpapi -lole32 -luuid -ldnsapi -lwininet
-set "RC=%ERRORLEVEL%"
-if not "%RC%"=="0" (
-    echo [x] build failed: %RC%
+echo [1/2] svpn.exe  ^(console, CLI + "svpn gui"^)
+"%CXX%" %FLAGS% -mconsole %SRC% -o svpn.exe %LIBS%
+if errorlevel 1 (
+    echo [x] console build failed
     popd
-    exit /b %RC%
+    exit /b 1
 )
 
-for %%f in (svpn.exe) do echo [+] built %%~ff  %%~zf bytes
+echo [2/2] svpn-gui.exe  ^(windowed, no console flash^)
+"%CXX%" %FLAGS% -mwindows -DSVPN_GUI_SUBSYSTEM %SRC% -o svpn-gui.exe %LIBS%
+if errorlevel 1 (
+    echo [x] gui build failed
+    popd
+    exit /b 1
+)
+
+for %%f in (svpn.exe svpn-gui.exe) do echo [+] built %%~ff  %%~zf bytes
 popd
 exit /b 0

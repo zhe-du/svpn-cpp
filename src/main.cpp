@@ -19,7 +19,7 @@
 namespace svpn {
 namespace {
 
-constexpr const char* kVersion = "1.1.0";
+constexpr const char* kVersion = "1.1.1";
 
 // 与 Python probe.ENDPOINTS 完全一致
 struct Endpoint {
@@ -45,7 +45,7 @@ constexpr const char* kCommonProxyPorts[] = {
 };
 
 // ---------------------------------------------------------------- 小工具
-std::string to_u8(const wchar_t* w) {
+[[maybe_unused]] std::string to_u8(const wchar_t* w) {
     if (!w) return {};
     int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
     if (n <= 1) return {};
@@ -194,6 +194,22 @@ struct Args {
             return def;
         }
     }
+    // 秒数参数：接受小数，下限 1 秒。
+    // 早先全部走 std::stoi，`--timeout 0.5` 被截成 0，0 再乘 1000 传进
+    // SetSocketTimeout 等于 INFINITE —— 想「缩短超时」反而变成永不超时
+    // （实测一次 probe 在 unreachable 端点上跑了 64 秒）。0.5 现在按 1 秒算。
+    int secs(const std::string& name, int def) const {
+        std::string v = flag(name);
+        if (v.empty()) return def;
+        try {
+            double d = std::stod(v);
+            if (!(d >= 1.0)) return 1;      // 含 NaN
+            if (d > 3600.0) return 3600;
+            return static_cast<int>(d + 0.5);
+        } catch (...) {
+            return def;
+        }
+    }
 };
 
 // ---------------------------------------------------------------- 输出
@@ -231,6 +247,10 @@ int cmd_init(const Paths& p, const Args& a) {
 }
 
 // ================================================================ up
+// 前台模式要复用 _serve 的完整启动路径（SNI 转发 / 统计周期落盘 / hosts IP 映射 /
+// pid 与 effective.json），只有日志去哪不同，所以 _serve 得能收一份已解析好的 Config。
+int cmd_serve(const Paths& p, const Args& a, const Config* preset = nullptr);
+
 int cmd_up(const Paths& p, const Args& a) {
     Config cfg = load_config(p);
     if (a.has("-p")) cfg.listen_port = a.num("-p", cfg.listen_port);
@@ -256,22 +276,36 @@ int cmd_up(const Paths& p, const Args& a) {
         (cfg.http_port && port_open(cfg.listen_host, cfg.http_port))) {
         // 两个端口都要查：只查 SOCKS5 的话，`up -b` 会先"成功"再在 HTTP 端口上
         // bind 失败，还可能把正在运行实例的 pid 记录带走。
-        std::cout << "[=] 已在运行（端口被占用）；改配置请先 svpn down\n";
-        return 0;
+        DWORD pid = 0;
+        if (read_pid(p, &pid) && pid_alive(pid)) {
+            std::cout << fmt("[=] 已在运行（pid=%lu）；改配置请先 svpn down\n", pid);
+            return 0;
+        }
+        // 端口被占、但没有本程序的 pid 记录 → 占着它的不是 svpn。
+        // 早先这里不分情况一律报「已在运行」并返回 0，于是一个被别的程序占死的端口
+        // 会让调用方以为「代理已经起来了」，然后连上去全部失败 —— 又一处假成功。
+        const int busy = port_open(cfg.listen_host, cfg.listen_port) ? cfg.listen_port
+                                                                    : cfg.http_port;
+        std::cout << fmt("[!] 端口 %d 被其他程序占用（没有 svpn 的 pid 记录）\n", busy);
+        std::cout << fmt("[!] 换个端口：up -p 17899    看谁占着：netstat -ano | findstr :%d\n",
+                         busy);
+        return 1;
     }
 
     if (!a.has("-b") && !a.has("--background")) {
-        // 前台模式
-        log_init(p, a.has("-v"));
-        Stats st;
-        std::atomic<bool> stop{false};
-        st.started_ms = now_ms();
+        // 前台模式：直接走 _serve 的同一条启动路径。
+        //
+        // 早先这里另写了一段精简启动（只调 serve_all 就返回），后果是前台模式：
+        //   · 不起 SNI 转发线程 —— 配了 cdn.enabled 且 hosts apply 之后，客户端连的是
+        //     127.0.0.1:443，前台跑等于没有人在听，下载静默全断；
+        //   · 不起统计周期落盘线程 —— `status` 的「上次统计」行永远不更新；
+        //   · 不做 apply_ip_map —— hosts 里的边缘 IP 不会被刷新；
+        //   · 不写 pid / effective.json —— `down` 与 `status` 都看不见这个实例；
+        //   · `up --system-proxy` 前台运行时根本没接管系统代理（又一处假成功）。
+        // 前台与后台只能是「日志去哪、进程要不要脱离控制台」的差别，不能是两套行为。
         std::cout << fmt("[i] 前台运行 %s:%d（Ctrl+C 退出）\n", cfg.listen_host.c_str(),
                          cfg.listen_port);
-        print_route(cfg);
-        int rc = serve_all(cfg, st, stop);
-        st.dump(p);
-        return rc == 0 ? 0 : 1;
+        return cmd_serve(p, a, &cfg);
     }
 
     // 后台：以 _serve 重启自己
@@ -341,8 +375,10 @@ BOOL WINAPI ctrl_handler(DWORD type) {
     return FALSE;
 }
 
-int cmd_serve(const Paths& p, const Args& a) {
-    Config cfg = load_config(p);
+int cmd_serve(const Paths& p, const Args& a, const Config* preset) {
+    // 前台模式由 cmd_up 传进来已经处理好覆盖项的 Config；后台自启时子进程看不到
+    // 父进程 argv，所以只能重新读 config.json 再靠 --listen-port/--mode/--node 覆盖。
+    Config cfg = preset ? *preset : load_config(p);
     // 接收 up 透传的覆盖项（子进程看不到父进程的 argv）
     if (a.has("--listen-port")) cfg.listen_port = a.num("--listen-port", cfg.listen_port);
     if (a.has("--mode")) cfg.mode = a.flag("--mode", cfg.mode);
@@ -395,6 +431,9 @@ int cmd_serve(const Paths& p, const Args& a) {
         if (cfg.upstream.configured()) {
             ej.set("upstream", Json::make_str(fmt("%s:%d", cfg.upstream.host.c_str(),
                                                   cfg.upstream.port)));
+            // kind 也必须落盘：`--node http://...` 只改了内存里的 cfg，config.json 仍是旧
+            // kind，status 读回后会把「节点」行显示成 socks5（链路实际走 HTTP = 假信息）
+            ej.set("upstream_kind", Json::make_str(cfg.upstream.kind));
         }
         std::ofstream ef(p.runtime / "effective.json", std::ios::trunc);
         ef << ej.dump(2);
@@ -519,6 +558,12 @@ int cmd_status(const Paths& p, const Args&) {
                         }
                     }
                 }
+                // 1.1.0 及更早的 effective.json 没有这个键：缺省就保持 config.json 的
+                // kind（不清空、不报错），只有真读到值才覆盖。
+                if (const Json* k = j.get("upstream_kind")) {
+                    std::string kind = k->as_str();
+                    if (!kind.empty()) cfg.upstream.kind = kind;
+                }
             } else if (j.has("upstream_configured")) {
                 cfg.upstream.host.clear();
                 cfg.upstream.port = 0;
@@ -624,7 +669,7 @@ int cmd_probe(const Paths& p, const Args& a) {
     // 否则 `svpn probe --json | jq` 直接报 Expecting value。
     const bool json_only = a.has("--json");
     std::ostream& human = json_only ? std::cerr : std::cout;
-    int timeout = a.num("--timeout", 6);
+    int timeout = a.secs("--timeout", 6);
     std::string node_arg = a.flag("--node");
     if (node_arg == "none") {
         cfg.upstream.host.clear();
@@ -798,7 +843,7 @@ int cmd_node(const Paths& p, const Args& a) {
 // ================================================================ cdn
 int cmd_cdn(const Paths& p, const Args& a) {
     Config cfg = load_config(p);
-    int timeout = a.num("--timeout", 8);
+    int timeout = a.secs("--timeout", 8);
     bool bench = !a.has("--no-bench");
     std::vector<std::string> domains;
     std::string one = a.flag("--domain");
@@ -887,7 +932,7 @@ int cmd_hosts(const Paths& p, const Args& a) {
                              "重新选边…\n", age, ttl / 3600.0);
         }
         std::vector<std::string> domains(kCdnDomains, kCdnDomains + kCdnDomains_count);
-        save_cache(p, refresh(domains, true, a.num("--timeout", 8) * 1000));
+        save_cache(p, refresh(domains, true, a.secs("--timeout", 8) * 1000));
         cache = load_cache(p, ttl);
     }
     std::map<std::string, std::string> entries;
@@ -1107,7 +1152,8 @@ void print_usage() {
               << "  system  on | off | show\n"
               << "  pac     生成 PAC（--apply 同时写入系统代理）\n"
               << "  steam   拉起 Steam（--system / --exe）\n"
-              << "  doctor  体检\n";
+              << "  doctor  体检\n"
+              << "  gui     打开图形界面（与 svpn-gui.exe 等价）\n";
 }
 
 // ================================================================ 分发
@@ -1172,9 +1218,24 @@ int dispatch(const std::vector<std::string>& argv) {
 }  // namespace
 }  // namespace svpn
 
+namespace svpn {
+// 供 GUI 复用同一条命令通道，保证图形界面与命令行行为完全一致
+int dispatch_cli(const std::vector<std::string>& args) { return dispatch(args); }
+}  // namespace svpn
+
+#ifdef SVPN_GUI_SUBSYSTEM
+// 窗口子系统构建：没有控制台，直接进图形界面
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) { return svpn::gui_main(); }
+#else
 int wmain(int argc, wchar_t** argv) {
     std::vector<std::string> args;
     args.reserve(static_cast<std::size_t>(argc));
     for (int i = 0; i < argc; ++i) args.push_back(svpn::to_u8(argv[i]));
+    // `svpn gui` / `svpn --gui` 打开图形界面；其余一律走命令行，保持原有语义
+    if (argc >= 2) {
+        const std::string sub = svpn::to_u8(argv[1]);
+        if (sub == "gui" || sub == "--gui") return svpn::gui_main();
+    }
     return svpn::dispatch(args);
 }
+#endif

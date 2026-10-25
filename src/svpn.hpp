@@ -304,4 +304,10 @@ std::string build_pac(const std::string& host, int port,
 // ============================================================ sni（透明转发）
 int serve_sni(const Config& cfg, Stats& st, std::atomic<bool>& stop);
 
+// ============================================================ 入口
+// CLI 分发（供 GUI 复用同一条命令通道，保证行为与命令行完全一致）
+int dispatch_cli(const std::vector<std::string>& args);
+// 图形界面主循环（GUI 子系统构建时由 wWinMain 调用）
+int gui_main();
+
 }  // namespace svpn

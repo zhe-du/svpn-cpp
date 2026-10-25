@@ -705,6 +705,47 @@ def test_node_override(ws):
     wait_closed(alt)
 
 
+# ---------------------------------------------------------------- M2. 节点 kind 透传（⑯）
+def test_node_kind_http(ws):
+    """⑯：`up -b --node http://...` 必须把 upstream_kind=http 写进 effective.json。
+
+    此前 effective.json 只有 host:port，status 读回后 kind 仍是 config.json 的旧值
+    （socks5），「节点」行显示 …（socks5）而链路实际走 HTTP —— 假信息。
+    """
+    print("\n[M2] up --node http:// 覆盖后 kind 必须一致（⑯）")
+    alt = pick_free_port()
+    node_port = pick_free_port()
+    used = {SOCKS_PORT, HTTP_PORT, alt}
+    while node_port in used:
+        node_port = pick_free_port()
+    pid_path = os.path.join(ws, "runtime", "svpn.pid")
+    eff_path = os.path.join(ws, "runtime", "effective.json")
+    spec = f"127.0.0.1:{node_port}"
+
+    rc, out = run(ws, ["up", "-b", "-p", str(alt),
+                       "--node", f"http://{spec}"], timeout=90)
+    check(f"up -b --node http://{spec} → rc=0", rc == 0, f"rc={rc} out={out.strip()[:200]}")
+    if wait_pidfile(pid_path) is None:
+        check("HTTP 节点用例：pidfile 已生成", False, pid_path)
+        return
+
+    eff = read_json(eff_path) or {}
+    check("effective.json upstream_kind == 'http'",
+          eff.get("upstream_kind") == "http", str(eff)[:200])
+    check(f"effective.json upstream == {spec}", eff.get("upstream") == spec, str(eff)[:200])
+
+    rc, out = run(ws, ["status"])
+    node_line = next((ln for ln in out.splitlines() if ln.startswith("节点")), "")
+    check("status 节点行 kind 与 --node 一致（http 而非 socks5）",
+          "http" in node_line and "socks5" not in node_line,
+          f"节点行={node_line!r}")
+
+    rc, out = run(ws, ["down"], timeout=60)
+    check("⑯ 用例收尾：down 成功", rc == 0 and ("已停止" in out or "没有在运行的实例" in out),
+          out.strip()[:160])
+    wait_closed(alt)
+
+
 # ---------------------------------------------------------------- L. down 兜底提示
 def test_down_port_hint(ws):
     """⑩ 不造「pid 属于别人」的场景（有误杀风险），改测用户可见的兜底提示。"""
@@ -732,6 +773,63 @@ def test_down_port_hint(ws):
         check("down 此时仍返回 rc=0", rc == 0, f"rc={rc}")
     finally:
         hold.close()
+
+
+# ---------------------------------------------------------------- N. up：端口被别的程序占用
+def test_up_port_foreign(ws):
+    """新增：端口被**非 svpn** 程序占住时，`up -b` 必须报错并返回非 0。
+
+    早先这里不看 pidfile，只要端口被占就一律打印「已在运行（端口被占用）」并 return 0。
+    后果是：别的程序占着 7899 时 `up -b` 报「已在运行」，调用方以为代理起来了，
+    连上去却全部失败 —— 又一处零报错的假成功。
+    """
+    print("\n[N] up：端口被其他程序占用")
+    pid_path = os.path.join(ws, "runtime", "svpn.pid")
+    try:
+        os.remove(pid_path)
+    except OSError:
+        pass
+
+    hold = socket.socket()
+    hold.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        hold.bind(("127.0.0.1", SOCKS_PORT))
+        hold.listen(64)
+        check("前置条件：端口被非 svpn 程序占住", port_open(SOCKS_PORT),
+              f"connect_ex={connect_ex_code(SOCKS_PORT)}")
+        check("前置条件：没有 svpn 的 pid 记录", not os.path.exists(pid_path),
+              f"exists={os.path.exists(pid_path)}")
+        rc, out = run(ws, ["up", "-b"], timeout=60)
+        check("up -b 撞到他人端口 → rc != 0", rc != 0, f"rc={rc}")
+        check("up -b 撞到他人端口 → 明说被其他程序占用",
+              "其他程序占用" in out, out.strip()[:240])
+        check("up -b 撞到他人端口 → 不再谎报「已在运行」",
+              "已在运行" not in out, out.strip()[:240])
+        check("up -b 撞到他人端口 → 给出换端口的办法", "-p" in out, out.strip()[:240])
+    finally:
+        hold.close()
+
+
+# ---------------------------------------------------------------- O. --timeout 小数/0
+def test_timeout_edge(ws):
+    """新增：`--timeout 0` 与 `--timeout 0.5` 不能变成「永不超时」。
+
+    早先 `--timeout` 走 std::stoi：0.5 被截成 0，0 再乘 1000 传进 SetSocketTimeout
+    等于 INFINITE —— 用户想缩短超时，实际得到的是永不超时（实测 probe 在不可达
+    端点上跑了 64 秒）。现在按秒解析、下限 1 秒。
+    这里只用 1 个域名、不实测吞吐，整体给 40 秒硬上限：真的永不超时会超时失败。
+    """
+    print("\n[O] --timeout 0 / 0.5 不被当成永不超时")
+    t0 = time.time()
+    try:
+        rc, out = run(ws, ["cdn", "--refresh", "--no-bench",
+                           "--domain", "store.steampowered.com", "--timeout", "0"], timeout=40)
+        dt = time.time() - t0
+        check("--timeout 0 → 在 40 秒内跑完（不是 INFINITE）", dt < 40, f"{dt:.1f}s rc={rc}")
+        check("--timeout 0 → 不崩、给得出结论", rc in (0, 1), f"rc={rc} {out.strip()[:160]}")
+    except subprocess.TimeoutExpired:
+        check("--timeout 0 → 在 40 秒内跑完（不是 INFINITE）", False, "subprocess 超时 40s")
+        check("--timeout 0 → 不崩、给得出结论", False, "卡死")
 
 
 # ---------------------------------------------------------------- main
@@ -786,7 +884,13 @@ def main():
         test_up_override(ws)
         test_lifecycle(ws)
         test_node_override(ws)
+        test_node_kind_http(ws)
         test_down_port_hint(ws)
+        test_up_port_foreign(ws)
+        if no_net:
+            skip("--timeout 0 不变成 INFINITE（整组）", "--no-net")
+        else:
+            test_timeout_edge(ws)
     finally:
         # 兜底：中途炸了也别留下常驻进程
         try:
