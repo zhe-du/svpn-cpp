@@ -180,15 +180,29 @@ def wait_pidfile(path, deadline=5.0):
     return None
 
 
-def task_count(image):
-    """按映像名数进程：只有我们的 svpn_t1.exe 会被数到，不会误伤 lead 的 svpn.exe。"""
+def count_my_instances(exe_path):
+    """按 **ExecutablePath** 数本轮实例。
+
+    不能按映像名数：两个人同时跑本脚本时都会把 exe 复制成 svpn_t1.exe，
+    按名字数会得到 2，把「⑫ 只有一个实例」判成假失败（V1 实测过）。
+    temp 目录是每轮唯一的，按路径前缀过滤就互不干扰。
+    返回 (count, 说明)；拿不到进程列表时 count = -1。
+    """
+    image = os.path.basename(exe_path)
+    want = os.path.normcase(os.path.abspath(exe_path))
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if not ps:
+        return -1, "找不到 powershell，无法按路径数进程"
+    script = (f"Get-CimInstance Win32_Process -Filter \"Name='{image}'\" "
+              f"| Select-Object -ExpandProperty ExecutablePath")
     try:
-        p = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/NH"],
-                           capture_output=True, timeout=20)
-        text = p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace")
-        return len(re.findall(rf"\b{re.escape(image)}\b", text)), text
+        p = subprocess.run([ps, "-NoProfile", "-NonInteractive", "-Command", script],
+                           capture_output=True, timeout=40)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return -1, str(exc)
+        return -1, f"powershell 调用失败: {exc}"
+    paths = [ln.strip() for ln in p.stdout.decode("utf-8", "replace").splitlines() if ln.strip()]
+    mine = [x for x in paths if os.path.normcase(os.path.abspath(x)) == want]
+    return len(mine), f"本轮 {len(mine)} / 同名进程 {len(paths)}：{paths}"
 
 
 # ---------------------------------------------------------------- A. 用法/退出码
@@ -533,8 +547,11 @@ def test_up_override(ws):
         eff_after = f.read()
     check("⑫ effective.json 逐字节未变", eff_after == eff_before,
           f"{len(eff_before)}B → {len(eff_after)}B")
-    n, _raw = task_count("svpn_t1.exe")
-    check("⑫ 仍然只有 1 个实例", n == 1, f"count={n}")
+    n, info = count_my_instances(os.path.join(ws, "svpn_t1.exe"))
+    if n < 0:
+        skip("⑫ 仍然只有 1 个实例", info)
+    else:
+        check("⑫ 仍然只有 1 个实例（按 ExecutablePath 数）", n == 1, info)
 
     rc3, out3 = run(ws, ["down"], timeout=60)
     check("down 能按 pid 正常停掉 A", rc3 == 0 and "已停止" in out3 and pid_a in out3,
@@ -573,8 +590,11 @@ def test_lifecycle(ws):
     check("status → rc=0", rc3 == 0, f"rc={rc3}")
     check("status → 显示运行中且 pid 一致", f"pid={pid1}" in out3, out3.strip()[:200])
 
-    n, raw = task_count("svpn_t1.exe")
-    check("只有 1 个 svpn 进程在跑", n == 1, f"count={n} raw={raw.strip()[:200]}")
+    n, info = count_my_instances(os.path.join(ws, "svpn_t1.exe"))
+    if n < 0:
+        skip("只有 1 个 svpn 进程在跑", info)
+    else:
+        check("只有 1 个 svpn 进程在跑（按 ExecutablePath 数）", n == 1, info)
 
     rc4, out4 = run(ws, ["down"], timeout=60)
     check("down → rc=0", rc4 == 0, f"rc={rc4} out={out4.strip()[:160]}")

@@ -390,43 +390,49 @@ src/main.cpp      ef09fc1c11844a04a76aae86b94c871b      49,232 B   10:45:03
 
 ## 10. 发布物门禁（副本）
 
-**被测对象**：`dist/svpn-1.1.0-win64/svpn.exe`（release-bot 交付的不可变发布副本；lead 原话说的是 `dist/svpn-e634fe15.exe`，实际布局为 `dist/svpn-1.1.0-win64/` + `dist/svpn-1.1.0-win64.zip` + `MANIFEST.txt`，无 RELEASE.txt/SHA256SUMS.txt）。
-**测试方式**：复制到 `$TEMP/dist-gate/`，`tests/test_cli.py` 一并复制为 `$TEMP/dist-gate/tests/`（脚本的 `ROOT` 因而指向该临时目录，被测的正是副本本身，不碰工作区）。
+**被测对象**：`dist/svpn-e634fe15.exe`（release-bot 交付的不可变发布副本）。同目录另有 `README.md` / `LICENSE` / `run.cmd` / `config.example.json` / `RELEASE.txt` / `SHA256SUMS.txt`。
+**测试方式**：复制到 `$TEMP/dist-final/svpn.exe`，`tests/test_cli.py` 复制为 `$TEMP/dist-final/tests/`（脚本 `ROOT` 因而指向该临时目录，被测的就是副本本身，不碰工作区）。
+
+> 交付过程中 dist 布局变过一次：先是 `dist/svpn-1.1.0-win64/svpn.exe` + `svpn-1.1.0-win64.zip`，后改为 `dist/svpn-e634fe15.exe`。两版 exe **逐字节相同**（MD5 均为 `e634fe15…`），我先后各测一遍，结论一致。
 
 ### 10.1 指纹
 
-| 对象 | MD5 | 判定 |
+| 对象 | 值 | 判定 |
 |---|---|---|
-| `dist/svpn-1.1.0-win64/svpn.exe` | `e634fe15067808ccf2ba0dad30d55d97` | **与签字基线一致** |
-| zip 解包后的 `svpn-1.1.0-win64/svpn.exe` | `e634fe15067808ccf2ba0dad30d55d97` | 一致（包内即副本） |
-| SHA256（供 `SHA256SUMS` 用） | `45dcee1899fc3620feb04632ba74ba80a7bd61e296ed0604c26f7bd8f25e0e6b` | — |
-| `MANIFEST.txt` 内声明 | MD5 `e634fe15067808ccf2ba0dad30d55d97` / 1,678,848 B / 构建 10:46:27 | 与实际一致 ✅ |
+| `dist/svpn-e634fe15.exe` MD5 | `e634fe15067808ccf2ba0dad30d55d97` | **与签字基线一致** |
+| 同上 SHA256 | `45dcee1899fc3620feb04632ba74ba80a7bd61e296ed0604c26f7bd8f25e0e6b` | 与 `SHA256SUMS.txt` 第一行**完全一致** |
+| `SHA256SUMS.txt` 其余条目 | README/LICENSE/run.cmd/config.example.json 各一行 | 格式正常（本次只校验 exe） |
+| `RELEASE.txt` 声明 | `svpn-e634fe15.exe` / MD5 `e634fe15…` / 1,678,848 B / 10:46:27 / g++ 16.2.0 | 与实际一致 ✅ |
+| `svpn-1.1.0-win64.zip` 内 `svpn.exe`（10:58 重打包后复核） | MD5 `e634fe15…` | 与顶层 exe 一致 ✅ |
+| zip 内 `run.cmd` / `SHA256SUMS.txt` vs 顶层 | `run.cmd` sha256 `eb8d16b5…`（250 B）两边相同；两份 `SHA256SUMS.txt` 逐行相同 | 包内外一致 ✅ |
 
 ### 10.2 四步链路（先断言端口 free）
 
 ```
-0) 17899 free(10061) / 17900 free(10061) → PORTS_FREE_OK
-1) svpn.exe -v                     → 1.1.0   rc=0
-2) up -b -p 17899                  → [+] 后台已启动 pid=25348  socks5://127.0.0.1:17899  http://127.0.0.1:17900
-                                     effective.json = {17899, 17900, whitelist, upstream_configured:false}
-3) up -b                           → [=] 已在运行（端口被占用）；改配置请先 svpn down   rc=0
-                                     pidfile 仍 25348（未变）
-4) status                          → 运行中 pid=25348 / 17899 监听中 / 17900 监听中
-5) down                            → [+] 已停止 pid=25348
-                                     17899 closed(10061) / 17900 closed(10061)
+0) 17899 free(10061) / 17900 free(10061) → 端口空闲前置成立
+1) svpn.exe -v          → 1.1.0   rc=0
+2) up -b -p 17899       → [+] 后台已启动 pid=22628  socks5://127.0.0.1:17899  http://127.0.0.1:17900
+3) up -b                → [=] 已在运行（端口被占用）；改配置请先 svpn down   rc=0
+                          pidfile 仍 22628（未变）
+4) status               → 运行中 pid=22628 / 17899 监听中 / 17900 监听中
+5) down                 → [+] 已停止 pid=22628
+                          17899 closed(10061) / 17900 closed(10061)
 ```
+另做一次**按可执行路径**的实例计数（避免误数到别人的 svpn）：`Get-CimInstance Win32_Process | ? ExecutablePath -like "*dist-final*"` → **count=1**，且其 pid 就是 pidfile 里的 21176（上一轮同法复验）。
 
 ### 10.3 回归套件
 
 ```
-python tests/test_cli.py   （在被测副本旁运行，端口由脚本 bind(0) 现挑）
-PASS 107 / FAIL 0 / SKIP 0（硬失败 0、契约待修 0）
+python tests/test_cli.py    （在被测副本旁运行，端口由脚本 bind(0) 现挑）
+PASS 113 / FAIL 0 / SKIP 0（硬失败 0、契约待修 0）
 ```
-含 ⑫ 全链路（首次 up / 二次 up 不换 pid / 只有 1 个实例 / down 释放两端口）、⑩ 兜底提示（无 pidfile 但端口被占 → `仍被占用` 且 rc=0）等。
+覆盖 ⑫ 全链路（首次 up / 二次 up 不换 pid / 只有 1 个实例 / down 释放两端口）、⑩ 兜底提示（无 pidfile 但端口被占 → 提示仍被占用且 rc=0）、①③④⑤⑧⑨ 等契约项。
+
+**一次假失败已排除**：T1-tests 与我并发跑同一套脚本时，`⑫ 仍然只有 1 个实例` 会失败（两次运行各自把 exe 复制成 `svpn_t1.exe`，按映像名计数得到 2）。用**按路径计数**证明我方只有 1 个实例，待 T1 空闲后重跑即 113/113。**这是并发跑测试的假阳性，不是产品缺陷**；建议 T1 把该断言改成按 `ExecutablePath` 过滤。
 
 ### 10.4 判定
 
-> **发布物 `dist/svpn-1.1.0-win64/svpn.exe`（MD5 `e634fe15067808ccf2ba0dad30d55d97`，1,678,848 B）通过最终门禁：指纹与基线一致、四步链路全绿、`-v` 输出 `1.1.0`、回归 107/107。可以发布。**
+> **发布物 `dist/svpn-e634fe15.exe`（MD5 `e634fe15067808ccf2ba0dad30d55d97`，SHA256 `45dcee18…`，1,678,848 B）通过最终门禁：指纹与签名基线及 `SHA256SUMS.txt` 一致、四步链路全绿（含"二次 up 被拒、pid 不变、down 释放两端口"）、`-v` 输出 `1.1.0`、回归 113/113。可以发布。**
 > **V1-verify · 2026-10-25**
 
-（若打包后再次改动 exe 或 `src/`，本判定自动作废，按 §9.3 重新核对指纹并重跑。）
+（若发布后再次改动 exe 或 `src/`，本判定自动作废，按 §9.3 重新核对指纹并重跑。）
