@@ -1,0 +1,30 @@
+# 编译中间产物
+*.o
+build/
+build_*.exe
+test_*.exe
+
+# 根目录构建输出（唯一发布物在 dist/，命名带哈希且设只读）
+/svpn.exe
+
+# 运行期数据（日志 / pid / 缓存 / 备份，含本机信息）
+runtime/
+**/hosts.backup
+**/wininet-backup.json
+**/effective.json
+**/*.pid
+**/*.log
+
+# 本机配置（含本机端口/模式改动，属运行时状态）
+config.json
+
+# 测试可执行文件与临时脚手架
+tests/*.exe
+tests/_*
+tests/out*.txt
+tests/out*.json
+tests/err.txt
+
+# 团队协作临时产物（含本机 hosts 备份等）
+_crew/tmp_*/
+_crew/**/runtime/
