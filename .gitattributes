@@ -1,0 +1,19 @@
+# 行尾统一：文本文件在仓库里一律 LF，checkout 到工作区也一律 LF。
+# 目的：任意机器 clone 后源码字节指纹可复现，能与 RELEASE.txt 记录的 MD5 对上
+# （即使本机 core.autocrlf=true，也不会在 checkout 时把源码转成 CRLF）。
+* text=auto eol=lf
+
+# 批处理：cmd.exe 要求 CRLF（含中文/goto 的 .cmd 用 LF 会解析错乱，见 docs/WINDOWS.md）
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 文档：显式声明为文本，跟随默认 LF
+*.md text eol=lf
+
+# 二进制：不做行尾转换，不参与 diff/合并
+*.exe binary
+*.bmp binary
+*.zip binary
+*.o binary
+*.lib binary
+*.dll binary
