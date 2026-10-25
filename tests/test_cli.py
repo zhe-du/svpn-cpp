@@ -736,8 +736,15 @@ def test_down_port_hint(ws):
 
 # ---------------------------------------------------------------- main
 def main():
-    global SOCKS_PORT, HTTP_PORT
+    global SOCKS_PORT, HTTP_PORT, SRC_EXE
     no_net = "--no-net" in sys.argv
+    # --exe 指到别处（例如发布物 dist/svpn.exe）：直接给发布物做门禁，而不是给 dev binary
+    if "--exe" in sys.argv:
+        i = sys.argv.index("--exe")
+        if i + 1 >= len(sys.argv):
+            print("FATAL --exe 后面要跟路径")
+            return 2
+        SRC_EXE = os.path.abspath(sys.argv[i + 1])
     if not os.path.exists(SRC_EXE):
         print(f"FATAL 找不到 {SRC_EXE}")
         return 2

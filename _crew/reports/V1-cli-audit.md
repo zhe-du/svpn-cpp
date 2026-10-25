@@ -388,51 +388,63 @@ src/main.cpp      ef09fc1c11844a04a76aae86b94c871b      49,232 B   10:45:03
 
 ---
 
-## 10. 发布物门禁（副本）
+## 10. 发布物门禁（dist 副本）
 
-**被测对象**：`dist/svpn-e634fe15.exe`（release-bot 交付的不可变发布副本）。同目录另有 `README.md` / `LICENSE` / `run.cmd` / `config.example.json` / `RELEASE.txt` / `SHA256SUMS.txt`。
-**测试方式**：复制到 `$TEMP/dist-final/svpn.exe`，`tests/test_cli.py` 复制为 `$TEMP/dist-final/tests/`（脚本 `ROOT` 因而指向该临时目录，被测的就是副本本身，不碰工作区）。
+**被测对象（终版命名）**：`dist/svpn.exe` —— MD5 `e634fe15067808ccf2ba0dad30d55d97`，1,678,848 B。
+同目录：`README.md` / `LICENSE` / `run.cmd` / `config.example.json` / `RELEASE.txt` / `SHA256SUMS.txt` / `svpn-1.1.0-win64.zip`。
 
-> 交付过程中 dist 布局变过一次：先是 `dist/svpn-1.1.0-win64/svpn.exe` + `svpn-1.1.0-win64.zip`，后改为 `dist/svpn-e634fe15.exe`。两版 exe **逐字节相同**（MD5 均为 `e634fe15…`），我先后各测一遍，结论一致。
+> 交付过程中 dist 换过三次命名：`svpn-1.1.0-win64/svpn.exe` → `svpn-e634fe15.exe` → **`svpn.exe`**。三次都是**同一批字节**（MD5 均为 `e634fe15…`），每次重命名后我都复跑了门禁，结论一致。最终改成 `svpn.exe` 是对的：`run.cmd` 里硬编码调用 `svpn.exe`，若产物带哈希后缀，双击脚本会直接报 `[!] svpn.exe not found`。
+>
+> **测试方式**：复制到 `$TEMP/dist-ship/svpn.exe`（`tests/test_cli.py` 同步复制到 `$TEMP/dist-ship/tests/`，脚本 `ROOT` 因而指向临时目录），**单会话连跑**，开头先断言端口 free。全程不碰工作区。
 
 ### 10.1 指纹
 
 | 对象 | 值 | 判定 |
 |---|---|---|
-| `dist/svpn-e634fe15.exe` MD5 | `e634fe15067808ccf2ba0dad30d55d97` | **与签字基线一致** |
-| 同上 SHA256 | `45dcee1899fc3620feb04632ba74ba80a7bd61e296ed0604c26f7bd8f25e0e6b` | 与 `SHA256SUMS.txt` 第一行**完全一致** |
-| `SHA256SUMS.txt` 其余条目 | README/LICENSE/run.cmd/config.example.json 各一行 | 格式正常（本次只校验 exe） |
-| `RELEASE.txt` 声明 | `svpn-e634fe15.exe` / MD5 `e634fe15…` / 1,678,848 B / 10:46:27 / g++ 16.2.0 | 与实际一致 ✅ |
-| `svpn-1.1.0-win64.zip` 内 `svpn.exe`（10:58 重打包后复核） | MD5 `e634fe15…` | 与顶层 exe 一致 ✅ |
-| zip 内 `run.cmd` / `SHA256SUMS.txt` vs 顶层 | `run.cmd` sha256 `eb8d16b5…`（250 B）两边相同；两份 `SHA256SUMS.txt` 逐行相同 | 包内外一致 ✅ |
+| `dist/svpn.exe` MD5 | `e634fe15067808ccf2ba0dad30d55d97` | **与签字基线一致** |
+| 同上 SHA256 | `45dcee1899fc3620feb04632ba74ba80a7bd61e296ed0604c26f7bd8f25e0e6b` | 与 `SHA256SUMS.txt` 首行**逐字一致** |
+| `SHA256SUMS.txt` 其余四行（run.cmd / README / LICENSE / config.example.json） | 与顶层同名文件比对通过（run.cmd 实测 `eb8d16b5…`/250 B） | 一致 ✅ |
+| `svpn-1.1.0-win64.zip` 内 `svpn.exe` | MD5 `e634fe15…` | 与顶层 exe 一致 ✅ |
+| zip 内 `run.cmd` / `SHA256SUMS.txt` vs 顶层 | 逐字节相同 | 包内外一致 ✅ |
+| `RELEASE.txt` 声明 | `MD5 e634fe15… / 1,678,848 B / 10:46:27 / g++ 16.2.0` | 与实物一致 ✅ |
 
 ### 10.2 四步链路（先断言端口 free）
 
 ```
-0) 17899 free(10061) / 17900 free(10061) → 端口空闲前置成立
-1) svpn.exe -v          → 1.1.0   rc=0
-2) up -b -p 17899       → [+] 后台已启动 pid=22628  socks5://127.0.0.1:17899  http://127.0.0.1:17900
-3) up -b                → [=] 已在运行（端口被占用）；改配置请先 svpn down   rc=0
-                          pidfile 仍 22628（未变）
-4) status               → 运行中 pid=22628 / 17899 监听中 / 17900 监听中
-5) down                 → [+] 已停止 pid=22628
-                          17899 closed(10061) / 17900 closed(10061)
+0) 17899 free(10061) / 17900 free(10061)  → 前置成立
+1) svpn.exe -v            → 1.1.0   rc=0
+2) up -b -p 17899 -m blacklist → [+] 后台已启动 pid=27884  socks5://127.0.0.1:17899  http://127.0.0.1:17900
+3) up -b                  → [=] 已在运行（端口被占用）；改配置请先 svpn down   rc=0
+                            pidfile 仍 27884（未变）
+4) status                 → 运行中 pid=27884 / 17899 监听中 / 17900 监听中 / blacklist
+5) down                   → [+] 已停止 pid=27884
+                            17899 closed(10061) / 17900 closed(10061)
 ```
-另做一次**按可执行路径**的实例计数（避免误数到别人的 svpn）：`Get-CimInstance Win32_Process | ? ExecutablePath -like "*dist-final*"` → **count=1**，且其 pid 就是 pidfile 里的 21176（上一轮同法复验）。
+实例数另按**可执行路径**复核（`Get-CimInstance Win32_Process | ? ExecutablePath -like "*dist-final*"/"*dist-ship*"`）→ count=1，pid 与 pidfile 一致。
 
 ### 10.3 回归套件
 
 ```
-python tests/test_cli.py    （在被测副本旁运行，端口由脚本 bind(0) 现挑）
+python tests/test_cli.py   （在被测副本旁运行；脚本自行 bind(0) 现挑端口）
 PASS 113 / FAIL 0 / SKIP 0（硬失败 0、契约待修 0）
 ```
-覆盖 ⑫ 全链路（首次 up / 二次 up 不换 pid / 只有 1 个实例 / down 释放两端口）、⑩ 兜底提示（无 pidfile 但端口被占 → 提示仍被占用且 rc=0）、①③④⑤⑧⑨ 等契约项。
+覆盖 ⑫ 全链路、⑩ 兜底提示、①③④⑤⑧⑨ 等契约项；与 T1-tests 独立跑出的 113/113 一致（另：`test_config.cpp` 178/0、`test_sni_parse.cpp` 27/0）。
 
-**一次假失败已排除**：T1-tests 与我并发跑同一套脚本时，`⑫ 仍然只有 1 个实例` 会失败（两次运行各自把 exe 复制成 `svpn_t1.exe`，按映像名计数得到 2）。用**按路径计数**证明我方只有 1 个实例，待 T1 空闲后重跑即 113/113。**这是并发跑测试的假阳性，不是产品缺陷**；建议 T1 把该断言改成按 `ExecutablePath` 过滤。
+**一次假失败已排除（记录在案）**：与 T1 并发跑同一套脚本时，`⑫ 仍然只有 1 个实例` 会红——两边都把 exe 复制成 `svpn_t1.exe`，按**映像名**计数得 2。按路径计数复核为我方 1 个，空闲窗口重跑即 113/113。**属并发假阳性，非产品缺陷。**
 
-### 10.4 判定
+### 10.4 一条 P4（不挡发布，仅记录）
 
-> **发布物 `dist/svpn-e634fe15.exe`（MD5 `e634fe15067808ccf2ba0dad30d55d97`，SHA256 `45dcee18…`，1,678,848 B）通过最终门禁：指纹与签名基线及 `SHA256SUMS.txt` 一致、四步链路全绿（含"二次 up 被拒、pid 不变、down 释放两端口"）、`-v` 输出 `1.1.0`、回归 113/113。可以发布。**
+`--node http://host:port` 时 `status` 的节点行仍显示 `（socks5）`：`effective.json` 只存 `upstream: "host:port"`、没存协议类型，`status` 的 kind 取自 `config.json`。实测：
+```
+up -b --node http://127.0.0.1:1080
+effective.json → "upstream": "127.0.0.1:1080"（无 kind 字段）
+status         → 节点  127.0.0.1:1080（socks5）      ← 应为 http
+```
+只影响显示，不影响转发（子进程拿到的是正确 kind）。修法：`effective.json` 增加 `upstream_kind`，`status` 有则用、无则回退 config。
+
+### 10.5 判定
+
+> **发布物 `dist/svpn.exe`（MD5 `e634fe15067808ccf2ba0dad30d55d97`，SHA256 `45dcee1899fc3620feb04632ba74ba80a7bd61e296ed0604c26f7bd8f25e0e6b`，1,678,848 B；zip 同字节）通过最终门禁：指纹与签名基线及 `SHA256SUMS.txt` 一致、四步链路全绿（二次 up 被拒且 pid 不变、down 释放两端口）、`-v` 输出 `1.1.0`、回归 113/113。可以发布。**
 > **V1-verify · 2026-10-25**
 
-（若发布后再次改动 exe 或 `src/`，本判定自动作废，按 §9.3 重新核对指纹并重跑。）
+（唯一遗留为 §10.4 的 P4 显示问题，不影响功能与转发。若发布后再次改动 exe 或 `src/`，本判定自动作废，按 §9.3 重新核对指纹并重跑。）
