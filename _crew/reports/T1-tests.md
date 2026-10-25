@@ -10,11 +10,11 @@
 |---|---|---|
 | `tests/test_config.cpp` | **PASS 178 / FAIL 0** | 0 |
 | `tests/test_sni_parse.cpp` | **PASS 27 / FAIL 0** | 0 |
-| `tests/test_cli.py`（按 V1 清单，含 ⑫ P1） | **PASS 107 / FAIL 0 / SKIP 0** | 0 |
-| 被测二进制 | `svpn.exe` md5 `e634fe15067808ccf2ba0dad30d55d97`（10:50 前后） | |
+| `tests/test_cli.py`（按 V1 清单，含 ⑫ P1） | **PASS 113 / FAIL 0 / SKIP 0** | 0 |
+| 被测二进制 | `svpn.exe` md5 `e634fe15067808ccf2ba0dad30d55d97`（10:46:27，V1 定的发布基线） | |
 
 C++ 两组与任务给出的判定矩阵 **完全一致**，未发现疑似 bug。
-`test_cli.py` 107 条全绿，包含 V1 挖到的唯一 P1（⑫ 失败的 up 抢删在跑实例的 pid），见文末第 III 节。
+`test_cli.py` 113 条全绿，包含 V1 挖到的唯一 P1（⑫ 失败的 up 抢删在跑实例的 pid），见文末第 III 节。
 
 ## 文件清单
 
@@ -535,17 +535,16 @@ ok    SNI 含控制字符 → false
 
 # 文件 3：`tests/test_cli.py`（按 V1 的 CLI 审计清单 + ⑫ P1）
 
-V1-verify 把审计结论交给我落成可执行断言。`tests/test_cli.py` 纯标准库（PAC 那组额外用 node），
-**107 条断言全绿**，没有 xfail / skip。分组：A 用法 / B system / C node / D hosts /
-E doctor / F probe --json / G pac / H up 覆盖+⑫ / I 生命周期 / J probe --lenient /
-K cdn 实测列 / L down 兜底。
+`tests/test_cli.py` 纯标准库（PAC 那组额外用 node），**113 条断言全绿**，没有 xfail / skip。
+分组：A 用法 / B system / C node / D hosts / E doctor / F probe --json / G pac /
+H up 覆盖+⑫ / I 生命周期 / J probe --lenient / K cdn 实测列 / L down 兜底 / M status 节点行。
 
 ## 跑法
 
 ```bash
 cd "D:/LE/AI/wbwrk/svpn-cpp"
-python tests/test_cli.py            # 全跑，约 40 秒（cdn 那组要联网）
-python tests/test_cli.py --no-net   # 跳过 probe / cdn（离线跑，其余照旧）
+python tests/test_cli.py            # 全跑，约 45 秒（cdn 那组要联网）
+python tests/test_cli.py --no-net   # 跳过 probe / cdn，其余照旧
 ```
 
 ## 安全边界（重要，别改回去）
@@ -555,7 +554,9 @@ python tests/test_cli.py --no-net   # 跳过 probe / cdn（离线跑，其余照
 2. **不碰系统代理**：只跑只读的 `system show`，绝不 `system on/off`、`pac --apply`、`up --system-proxy`。
 3. **不在工程根目录跑 exe**：复制成 `<temp>/svpn_t1.exe`，config/runtime/pid/effective 全落在 temp 里。
 4. **生命周期在一条命令内跑完**：`up → up → status → down` 全在同一个 python 进程里。
-5. **端口每轮动态挑**（`bind(0)`），且 listen_port 与 http_port 一起换；`-p/-m` 覆盖用例独立一组、不改 config。
+5. **端口每轮动态挑**（`bind(0)`），**listen_port 与 http_port 都挑**，且互不相同、也不与覆盖用的
+   alt/node 端口重复 —— 环境里有别人手工跑的实例占着 7900，只挑 listen_port 会在 http_port 上撞
+   「已在运行」，⑫ 就会假绿。
 6. **记录 md5**：开跑打印被测二进制 md5/size/mtime，结论必须带版本。
 
 ## 实际输出（原文，完整）
@@ -564,8 +565,8 @@ python tests/test_cli.py --no-net   # 跳过 probe / cdn（离线跑，其余照
 svpn CLI 回归（T1）
   被测二进制: D:\LE\AI\wbwrk\svpn-cpp\svpn.exe
   md5=e634fe15067808ccf2ba0dad30d55d97  size=1678848  mtime=2026-10-25 10:46:27
-  端口: SOCKS 53348 / HTTP 53349（避开 7899/7900）
-  工作目录: C:\Users\zhedu\AppData\Local\Temp\svpn_t1_main_ih0o5_uv
+  端口: SOCKS 62384 / HTTP 62385（避开 7899/7900）
+  工作目录: C:\Users\zhedu\AppData\Local\Temp\svpn_t1_main_k8z_h699
 
 [A] 用法与退出码
   PASS  无参数 → rc=2
@@ -641,7 +642,7 @@ svpn CLI 回归（T1）
   PASS  pac 文件已生成 runtime/svpn.pac
   PASS  PAC 里代理串是 SOCKS5 127.0.0.1:<端口>
   PASS  PAC 是合法 JS（new Function 不抛）
-    判定: {"store.steampowered.com": "SOCKS5 127.0.0.1:53348; DIRECT", "www.baidu.com": "DIRECT", "example.org": "DIRECT", "notsteam.example.com": "DIRECT", "steampowered.com.evil.cn": "DIRECT"}
+    判定: {"store.steampowered.com": "SOCKS5 127.0.0.1:62384; DIRECT", "www.baidu.com": "DIRECT", "example.org": "DIRECT", "notsteam.example.com": "DIRECT", "steampowered.com.evil.cn": "DIRECT"}
   PASS  store.steampowered.com → SOCKS5…; DIRECT
   PASS  www.baidu.com → DIRECT
   PASS  example.org → DIRECT
@@ -654,10 +655,10 @@ svpn CLI 回归（T1）
   PASS  实测列格式合法（'-' 或 N.NNMB/s）
 
 [H] up -p/-m 覆盖 + ⑫ 失败的 up 不得抢删在跑实例的 pid
-  PASS  up -b -p 63746 -m blacklist → rc=0
+  PASS  up -b -p 61263 -m blacklist → rc=0
   PASS  up -b -p → 输出「后台已启动」
-  PASS  pidfile 内容为数字
-  PASS  -p 覆盖的端口 63746 已监听
+  PASS  pidfile 已生成且内容为数字
+  PASS  -p 覆盖的端口 61263 已监听
   PASS  effective.json 记下覆盖端口
   PASS  effective.json 记下覆盖模式
   PASS  status 用 effective.json 而非 config.json 报端口
@@ -670,9 +671,9 @@ svpn CLI 回归（T1）
   PASS  ⑫ effective.json 逐字节未变
   PASS  ⑫ 仍然只有 1 个实例
   PASS  down 能按 pid 正常停掉 A
-  PASS  down 后-p 覆盖端口 63746 连接被拒（10061）
-  PASS  down 后config 端口 53348 连接被拒（10061）
-  PASS  down 后http 端口 53349 连接被拒（10061）
+  PASS  down 后-p 覆盖端口 61263 连接被拒（10061）
+  PASS  down 后config 端口 62384 连接被拒（10061）
+  PASS  down 后http 端口 62385 连接被拒（10061）
   PASS  down 后 pidfile 被清理
   PASS  down 后 effective.json 被清理
 
@@ -680,8 +681,8 @@ svpn CLI 回归（T1）
   PASS  首次 up -b → rc=0
   PASS  首次 up -b → 输出「后台已启动」
   PASS  pidfile 内容为数字
-  PASS  端口 53348 已监听
-  PASS  端口 53349 已监听
+  PASS  端口 62384 已监听
+  PASS  端口 62385 已监听
   PASS  二次 up -b → rc=0
   PASS  二次 up -b → 输出「已在运行」
   PASS  二次 up -b 不换 pid
@@ -690,68 +691,47 @@ svpn CLI 回归（T1）
   PASS  只有 1 个 svpn 进程在跑
   PASS  down → rc=0
   PASS  down → 输出「已停止」
-  PASS  down 后 53348 连接被拒（10061）
-  PASS  down 后 53349 连接被拒（10061）
+  PASS  down 后 62384 连接被拒（10061）
+  PASS  down 后 62385 连接被拒（10061）
   PASS  二次 down → rc=0
   PASS  二次 down → 输出「没有在运行的实例」
+
+[M] up --node 覆盖后 status 的节点行（⑮）
+  PASS  up -b --node socks5://127.0.0.1:55131 → rc=0
+  PASS  effective.json upstream_configured == true
+  PASS  effective.json upstream == 127.0.0.1:55131
+  PASS  status 节点行显示覆盖的节点（不再说「未配置」）
+  PASS  status 节点行带 socks5
+  PASS  ⑮ 用例收尾：down 成功
 
 [L] down 兜底提示：没 pidfile 但端口被占（⑩）
   PASS  前置条件：测试进程已占住端口
   PASS  down 无 pidfile → 报「没有在运行的实例」
-  PASS  down 无 pidfile 但 53348 被占 → 提示仍被占用
+  PASS  down 无 pidfile 但 62384 被占 → 提示仍被占用
   PASS  down 此时仍返回 rc=0
 
-PASS 107 / FAIL 0 / SKIP 0（其中硬失败 0、契约待修 0）
+PASS 113 / FAIL 0 / SKIP 0（其中硬失败 0、契约待修 0）
 ```
 
 ## V1 清单 → 当前状态（全部绿）
 
 | V1 的用例 | 测试里的断言 | 结果 |
 |---|---|---|
-| `system show` / `svpn system` 无子命令 → rc=0 含 `ProxyEnable` | `test_system` | 绿 |
+| `system show` / `svpn system` 无子命令 | `test_system` | 绿 |
 | `node clear` / `node set` 无 URL | `test_node` | 绿 |
 | `hosts clear --no-elevate` 字节保真 | `test_hosts_clear` | 绿（8 条） |
 | `probe --json` → stdout 整体 `json.loads` | `test_probe` | 绿 |
-| `--help` / `-h` / `help` / `probe -h` → rc=0 + 用法 | `test_usage` | 绿 |
-| doctor：未知键 rc≠0 / 缺键 rc=0 / `_note` 容忍 / 语法错 rc=1 | `test_doctor` | 绿（10 条） |
-| `up -b -p X -m blacklist` → status 报 `X 监听中` + `模式 blacklist` | `test_up_override` | 绿 |
-| **⑫ 失败的 up 不得抢删在跑实例的 pid** | `test_up_override` | 绿 |
-| `up -b` 二次 → `[=] 已在运行` rc=0、pid 不变、只 1 个进程 | `test_lifecycle` | 绿 |
-| `down` 后端口 10061；二次 `down` rc=0 + `[=] 没有在运行的实例` | `test_lifecycle` | 绿 |
-| PAC `new Function` 语法 + 5 个 host 分流 | `test_pac` | 绿 |
-| **④ `--lenient` 语义** | `test_probe_lenient` | 绿（按不变量，见下） |
+| `--help` / `-h` / `help` / `probe -h` | `test_usage` | 绿 |
+| doctor：未知键 / 缺键 / `_note` / 语法错 | `test_doctor` | 绿（10 条） |
+| `up -b -p X -m blacklist` → status 端口+模式 | `test_up_override` | 绿 |
+| **⑫ 失败的 up 不得抢删在跑实例的 pid** | `test_up_override` | **绿** |
+| `up -b` 二次幂等 / `down` 端口 10061 / 二次 down | `test_lifecycle` | 绿 |
+| PAC 语法 + 5 个 host 分流 | `test_pac` | 绿 |
+| **④ `--lenient` 语义** | `test_probe_lenient` | 绿（不变量） |
 | **⑧ cdn 实测列格式** | `test_cdn_tput` | 绿 |
 | **⑨ help 不再宣传 `pac --write`** | `test_usage` | 绿 |
-| **⑩ down 的「端口仍被占用」兜底提示** | `test_down_port_hint` | 绿 |
-
-## ④ 写成不变量，不写死 rc
-
-V1 的口径：strict 按 `unusable`、lenient 按 `dead`。断言全部从输出里解析计数再验一致性，
-所以当次网络好坏都不影响结果。实测（`--node none --timeout 1`）：
-
-```
-    strict : 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=1
-    lenient: 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=0
-```
-
-断言：
-- 每轮 `直连+需节点+死 == 9`
-- `D（当前不可用）== B（需节点）+ C（死端点）`
-- `strict rc == (D>0)`；`lenient rc == (C>0)`；`lenient rc <= strict rc`
-- `--node none` 时 `C` 恒为 0（直连失败记「需节点」）—— 这正是 lenient 的意义：
-  同一份输出，strict 返回 1、lenient 返回 0。
-
-**没有**断言「lenient 一定 0」（C>0 时是 1，那样会 flaky）。
-
-## ⑧⑨⑩ 怎么做成离线可判的
-
-- **⑧ cdn**：`cdn --refresh --no-bench --domain cdn.akamai.steamstatic.com --timeout 4`，
-  只验「实测」列是 `-`（不是 `0.00MB/s`），并接受 `N.NNMB/s` 形态。**不**断言「必须 > 0」。
-  DoH 不通拿不到行时 SKIP，不判失败。
-- **⑨ pac --write**：不比 md5（恒真、没信息量），改测文档契约 ——
-  `--help` 全文不得出现 `--write`，且 pac 行必须提到 `--apply`。防的是「文档把空开关写回去」。
-- **⑩ down 兜底**：不造「pid 属于别人」的场景（会误杀），改成用 python 自己占住 config 里的
-  listen_port、不放 pidfile，然后断言 down 会打 `[!] 但端口 <port> 仍被占用`，且 rc 仍为 0。
+| **⑩ down 的「端口仍被占用」兜底** | `test_down_port_hint` | 绿 |
+| **⑮ `up --node` 覆盖后 status 的节点行** | `test_node_override` | 绿（已修，见下） |
 
 ## ⑫ 这个 P1 用例（最值钱的一条，别删）
 
@@ -769,12 +749,51 @@ assert pidfile 与 effective.json 都被清理
 
 为什么「只有 http_port 被占」：旧版只查 SOCKS5 端口 → 第二个 up「先成功」→ 子进程 bind HTTP 失败 →
 把在跑实例的 pid 带走。现在 `src/main.cpp:255` 两个端口都查，直接 rc=0 且不碰 pid。
-`effective.json` 逐字节比对是 V1 建议加的：失败实例同样不该覆盖在跑实例的状态记录。
 
-## ⑮ 没写成断言（按 V1 要求）
+## ④ 写成不变量，不写死 rc
 
-`status` 的「节点」行不读 `effective.json`（`up --node` 覆盖后 status 仍显示 config 里的节点），
-V1 判 P3、不挡发布。**我没有把它写成失败断言**，避免用 P3 卡住发版；要修的话补一行断言即可。
+```
+strict : 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=1
+lenient: 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=0
+```
+
+断言：`A+B+C == 9`、`D == B + C`、`strict rc == (D>0)`、`lenient rc == (C>0)`、
+`lenient rc <= strict rc`、`--node none` 时 `C` 恒 0。
+**没有**断言「lenient 一定 0」（C>0 时是 1，那样会 flaky）。
+
+## ⑮ 已修，现在是正向用例（此前是 P3，现在不能写 xfail）
+
+`e634fe15` 起 `status` 也读 `effective.json` 的 upstream：
+
+```
+up -b -p <ALT> --node socks5://127.0.0.1:<NODE>
+→ effective.json: "upstream_configured": true, "upstream": "127.0.0.1:<NODE>"
+→ status: 节点     127.0.0.1:<NODE>（socks5）      # 此前一直显示「未配置（纯直连）」
+```
+
+断言 5 条：effective.json 两个字段 + status 含节点串 + 不再出现「未配置」+ 带 socks5。
+
+### ⑮b（P4，只记录、没写成失败断言）
+
+`--node http://…` 时 `status` 仍显示 `（socks5）`：
+
+```
+effective.json: {"upstream_configured": true, "upstream": "127.0.0.1:61730"}   ← 只有 host:port，没有 kind
+status:          节点     127.0.0.1:61730（socks5）                            ← kind 取自 config.json
+```
+
+即 kind 没进 effective.json。影响很小（只影响 status 那一行的显示），V1 未列、按 P4 处理，
+**我没有把它写成失败断言**，免得用 P4 卡发布。要修的话：effective.json 加 `"upstream_kind"`，
+status 有就用、没有就退回 config。
+
+## ⑧⑨⑩ 怎么做成离线可判的
+
+- **⑧ cdn**：`cdn --refresh --no-bench --domain cdn.akamai.steamstatic.com --timeout 4`，
+  只验「实测」列是 `-`（不是 `0.00MB/s`），接受 `N.NNMB/s` 形态；**不**断言 >0；拿不到行时 SKIP。
+- **⑨ pac --write**：不比 md5（恒真、没信息量），改测文档契约 —— `--help` 全文不得出现 `--write`，
+  且 pac 行必须提到 `--apply`。
+- **⑩ down 兜底**：不造「pid 属于别人」的场景（防误杀），改成自己占住 config 的 listen_port、
+  不放 pidfile，断言 down 打 `[=] 没有在运行的实例` **且** `[!] 但端口 N 仍被占用`，rc 仍 0。
 
 ## doctor 的契约（已由实现定死）
 
@@ -785,8 +804,7 @@ V1 判 P3、不挡发布。**我没有把它写成失败断言**，避免用 P3 
 语法   {"listen_port": 1234,,}       → [!] …config.json…解析失败…    rc=1
 ```
 
-断言按**行**匹配（`[!]` 开头 + 含 `config.json` + 含键名），不依赖措辞和行序 ——
-这两个在不同构建间都变过（`439fd9dc` 是 `[!]` 在表头前，`702be7f8` 在后；文案从「未知键」变成「无法识别的键」）。
+断言按**行**匹配（`[!]` 开头 + 含 `config.json` + 含键名），不依赖措辞与行序 —— 两者在不同构建间都变过。
 
 ## 二进制版本轨迹（复现时以 md5 为准）
 
@@ -799,19 +817,18 @@ V1 判 P3、不挡发布。**我没有把它写成失败断言**，避免用 P3 
 | `b5c97728` | 10:40:03 | 绿 | 绿 | 红 | 绿 |
 | `439fd9dc` | 10:40:29 | 绿 | 绿 | 绿 | 绿 |
 | `702be7f8` | 10:42:03 | 绿 | 绿 | 绿 | 绿 |
-| `ec6d47eb` | 10:43:27 | 绿 | 绿 | 绿 | 绿（V1 定的基线，我 89/89） |
-| **`e634fe15`** | ~10:50 | 绿 | 绿 | 绿 | 绿 ← **本报告定稿版本（107/107）** |
+| `ec6d47eb` | 10:43:27 | 绿 | 绿 | 绿 | 绿 |
+| **`e634fe15`** | 10:46:27 | 绿 | 绿 | 绿 | 绿 ← **发布基线（113/113）** |
 
-期间 `svpn.exe` 被重编 9 次，撞上过一次「文件不存在」的窗口期（build.cmd 直接写 svpn.exe）。
-`f3a8fa7b`~`ec6d47eb` 的 doctor/⑫ 两列由 V1 实测补齐。**发版前请 md5 定版再跑一遍** ——
-我这边每次都会在首行打印 md5，可以直接抄进 release notes。
+`f3a8fa7b`~`ec6d47eb` 的 doctor/⑫ 两列由 V1 实测补齐；`e634fe15` 是我完整跑通的版本。
 
-## 踩到的三个坑（都写进测试注释了）
+## 踩到的四个坑（都写进测试注释了）
 
 1. **`connect_ex` 在 `settimeout()` 之后返回 10035（WSAEWOULDBLOCK），不是 10061。**
-   `settimeout` 把 socket 切成非阻塞。正解：`s.settimeout(None)` 用阻塞 socket。
-2. **固定端口会被上一轮残留污染**：残留监听会让 `doctor` 因「端口被占用」假绿、
-   `up -b` 因「已在运行」假绿。现在每轮 `bind(0)` 现挑空闲端口。
-3. **`listen(1)` 的 backlog 会吃掉自己的探针**：⑩ 那组我先用 `connect_ex` 探一下端口，
-   这一步就占了唯一的 backlog 名额，之后 C++ 侧 300ms 的 `port_open` 连不进来 →
-   `down` 误判成「端口是空的」，提示不出现。改成 `listen(64)` 后稳定。
+   正解：`s.settimeout(None)` 用阻塞 socket。
+2. **固定端口会被上一轮残留污染**：残留监听会让 `doctor` 假绿、`up -b` 假绿。现在每轮 `bind(0)` 现挑。
+3. **`listen(1)` 的 backlog 会吃掉自己的探针**：⑩ 那组先用 `connect_ex` 探端口，这一步就占了唯一
+   backlog 名额，C++ 侧 300ms 的 `port_open` 连不进来 → `down` 误判端口是空的、提示不出现。
+   改 `listen(64)` 后稳定。
+4. **`up -b` 返回与写 pidfile 之间有窗口**（V1 踩过）：现在统一用 `wait_pidfile()` 轮询到数字为止，
+   不再「读完立刻断言」。`down` 后的端口释放是异步的，也一律轮询 ≤8s 到 10061，不一次性断言。
