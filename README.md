@@ -2,12 +2,13 @@
 
 一句话：在本机起一个**只服务 Steam 的代理**（SOCKS5 + HTTP），按域名把 Steam 流量交给你的节点，再带一个 CDN 选边器把下载/更新钉到当前最快的 Akamai 边缘。**没有节点也能用。**
 
-Windows 10/11 x64，**单个 `svpn.exe`（约 1.6MB，静态链接，零 DLL 依赖）**。不需要 Python、不需要 .NET、不需要装运行库——拷一个文件就能跑。
+Windows 10/11 x64，**两个静态链接的 exe、不依赖任何第三方运行库 DLL**：`svpn.exe`（命令行 + `svpn.exe gui`）与 `svpn-gui.exe`（窗口子系统，双击不闪控制台），各约 1.7MB。不需要 Python、不需要 .NET、不需要装运行库——拷文件就能跑。
 
 这是 [svpn](https://github.com/zhe-du/svpn)（Python 版）的 Windows 原生重写：命令同名、参数同义、`config.json` 与 `runtime/cdn-cache.json` 双向兼容。
 
-> 当前二进制指纹：**md5 `e634fe15067808ccf2ba0dad30d55d97` · 1,678,848 字节**（2026-10-25 10:46 构建，版本 `1.1.0`）。本文所有行为描述以它为准。
-> 同一份源码重编会得到不同 md5，行为不变；对不上就按 [docs/BUILD.md](docs/BUILD.md) 重编。
+> 本文件描述的是 **1.1.1**。同一份源码重编会得到不同 md5（行为不变），所以这里不写死哈希：
+> 要核对产物请用发布包里的 `SHA256SUMS.txt`，或按 [docs/BUILD.md](docs/BUILD.md) 重编。
+> 源码指纹与构建环境记录在发布包的 `RELEASE.txt`。
 
 ## 它不做什么
 
@@ -62,7 +63,7 @@ svpn.exe down
 
 ---
 
-## 子命令一览（13 个）
+## 子命令一览（14 个）
 
 `svpn.exe` 不带参数会打印用法并返回 `2`；任意位置出现 `-h` / `--help` / `help` 只打印用法并返回 `0`；`svpn.exe -v`（或 `--version`）打印版本号。
 
@@ -78,9 +79,13 @@ svpn.exe down
 | `cdn` | `--refresh`<br>`--no-bench`<br>`--domain <域名>`<br>`--timeout <秒>`（默认 8） | DoH 解析 + TLS 握手竞速（+1MB 实测），结果写 `runtime/cdn-cache.json` | `0` |
 | `hosts` | `apply` / `clear`（**省略即 `apply`**）<br>`--no-elevate`<br>`--timeout <秒>`（默认 8） | 写 / 删 hosts 里带标记的托管块；非管理员会自动请求提权 | `0` / `1` |
 | `system` | `on` / `off` / `show` | 接管 / 还原 / 查看 WinINET 代理（只写 `HKCU`） | `0` / `1` / `2` |
+| `gui` | —（`--gui` 同义） | 打开图形界面；所有按钮都调用同一个 `dispatch_cli()`，与命令行行为完全一致 | `0` |
 | `pac` | `--apply` | 生成 `runtime/svpn.pac`；加 `--apply` 同时写进 `AutoConfigURL` | `0` / `1` |
 | `steam` | `--system`<br>`--exe <路径>` | 拉起 Steam（`--system` 先把系统代理指过来）；找不到 `steam.exe` 返回 `2`，属正常 | `0` / `1` / `2` |
 | `doctor` | — | 体检：`config.json` 是否存在**且能否解析**、有没有未知键、端口占用、CDN 缓存过期、节点连通性、管理员权限 | `0` 无问题 / `1` 有问题 |
+
+`svpn-gui.exe` 是同一个程序的窗口子系统构建（双击不闪控制台），`svpn.exe gui` 与之等价——
+两个 exe 由 `build.cmd` 一趟编译产出，源码完全相同，只有入口子系统不同。
 
 细节（都对着当前构建核过，不是推测）：
 
@@ -233,7 +238,7 @@ SNI 模式的边界（都在代码里）：只绑回环、只放行 `cdn.hosts` 
 
 一句话：MinGW-w64 `g++ -std=c++20 -O2 -static -municode` + `-lws2_32 -lcrypt32 -lsecur32 -lwinhttp -ladvapi32 -luser32 -lshell32 -liphlpapi -lole32 -luuid -ldnsapi -lwininet`，或直接跑 `build.cmd`。
 
-源码 13 个 `.cpp` + 1 个 `.hpp`：`json` / `util` / `rules_data` / `config` / `rules` / `net` / `tls` / `proxy` / `cdn` / `winsys` / `pac` / `sni` / `main`。TLS 走 SChannel，并发模型是**线程 + 阻塞 socket + select 双向中继**，没有 asyncio。
+源码 14 个 `.cpp` + 1 个 `.hpp`：`json` / `util` / `rules_data` / `config` / `rules` / `net` / `tls` / `proxy` / `cdn` / `winsys` / `pac` / `sni` / `gui` / `main`。TLS 走 SChannel，并发模型是**线程 + 阻塞 socket + select 双向中继**，没有 asyncio。
 
 ---
 
@@ -266,7 +271,8 @@ SNI 模式的边界（都在代码里）：只绑回环、只放行 `cdn.hosts` 
 ### 兼容性
 
 - **Windows 10 / 11 x64**。依赖 WinINET 注册表、`System32\drivers\etc\hosts`、SChannel；macOS / Linux 不支持。
-- **单 exe 静态链接，零 DLL 依赖**（不需要 libstdc++-6.dll / libgcc_s_seh-1.dll / libwinpthread-1.dll），也不需要 Python 或 .NET 运行时。
+- **两个 exe 都是静态链接，不依赖任何第三方运行库 DLL**（没有 libstdc++-6.dll / libgcc_s_seh-1.dll / libwinpthread-1.dll），也不需要 Python 或 .NET 运行时。
+  它们仍然导入 Windows 自带的系统 DLL 与 UCRT（`api-ms-win-crt-*`，Win10 起是系统组件）——这是任何 Win32 程序都无法避免的，实测导入表共 23 项，可用 `objdump -p svpn.exe | grep "DLL Name"` 自行核对。
 - **`config.json` 与 `runtime/cdn-cache.json` 与 Python 版双向兼容**，两边可以换着跑（同一时间只能跑一个，端口与 hosts 托管块是共用的）。
 - **只代理 TCP**；半开连接会等系统 TCP 超时（见「已知差异」第 2 条）。
 - 上游只认 `socks5://` 与 `http://`；`kind: "direct"` 表示不走上游。

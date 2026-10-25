@@ -12,6 +12,7 @@
 | `tests/test_sni_parse.cpp` | **PASS 27 / FAIL 0** | 0 |
 | `tests/test_cli.py`（按 V1 清单，含 ⑫ P1） | **PASS 113 / FAIL 0 / SKIP 0** | 0 |
 | 被测二进制 | `svpn.exe` md5 `e634fe15067808ccf2ba0dad30d55d97`（10:46:27，V1 定的发布基线） | |
+| **发布物门禁** | `dist/svpn.exe`（同 md5，SHA256 `45dcee18…0e6b`，1,678,848 B）→ 113/113 | 0 |
 
 C++ 两组与任务给出的判定矩阵 **完全一致**，未发现疑似 bug。
 `test_cli.py` 113 条全绿，包含 V1 挖到的唯一 P1（⑫ 失败的 up 抢删在跑实例的 pid），见文末第 III 节。
@@ -565,8 +566,8 @@ python tests/test_cli.py --no-net   # 跳过 probe / cdn，其余照旧
 svpn CLI 回归（T1）
   被测二进制: D:\LE\AI\wbwrk\svpn-cpp\svpn.exe
   md5=e634fe15067808ccf2ba0dad30d55d97  size=1678848  mtime=2026-10-25 10:46:27
-  端口: SOCKS 62384 / HTTP 62385（避开 7899/7900）
-  工作目录: C:\Users\zhedu\AppData\Local\Temp\svpn_t1_main_k8z_h699
+  端口: SOCKS 52210 / HTTP 52211（避开 7899/7900）
+  工作目录: C:\Users\zhedu\AppData\Local\Temp\svpn_t1_main_01z5bj_c
 
 [A] 用法与退出码
   PASS  无参数 → rc=2
@@ -628,8 +629,8 @@ svpn CLI 回归（T1）
   PASS  probe --json → 含 ok/unusable 字段
 
 [J] probe --lenient 的语义不变量（④）
-    strict : 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=1
-    lenient: 直连 8 / 需节点 1 / 死 0 / 不可用 1  rc=0
+    strict : 直连 6 / 需节点 3 / 死 0 / 不可用 3  rc=1
+    lenient: 直连 6 / 需节点 3 / 死 0 / 不可用 3  rc=0
   PASS  每轮都有 9 个端点计入桶
   PASS  D（当前不可用）== B（需节点）+ C（死端点）
   PASS  strict rc == (D>0)
@@ -642,7 +643,7 @@ svpn CLI 回归（T1）
   PASS  pac 文件已生成 runtime/svpn.pac
   PASS  PAC 里代理串是 SOCKS5 127.0.0.1:<端口>
   PASS  PAC 是合法 JS（new Function 不抛）
-    判定: {"store.steampowered.com": "SOCKS5 127.0.0.1:62384; DIRECT", "www.baidu.com": "DIRECT", "example.org": "DIRECT", "notsteam.example.com": "DIRECT", "steampowered.com.evil.cn": "DIRECT"}
+    判定: {"store.steampowered.com": "SOCKS5 127.0.0.1:52210; DIRECT", "www.baidu.com": "DIRECT", "example.org": "DIRECT", "notsteam.example.com": "DIRECT", "steampowered.com.evil.cn": "DIRECT"}
   PASS  store.steampowered.com → SOCKS5…; DIRECT
   PASS  www.baidu.com → DIRECT
   PASS  example.org → DIRECT
@@ -655,10 +656,10 @@ svpn CLI 回归（T1）
   PASS  实测列格式合法（'-' 或 N.NNMB/s）
 
 [H] up -p/-m 覆盖 + ⑫ 失败的 up 不得抢删在跑实例的 pid
-  PASS  up -b -p 61263 -m blacklist → rc=0
+  PASS  up -b -p 52298 -m blacklist → rc=0
   PASS  up -b -p → 输出「后台已启动」
   PASS  pidfile 已生成且内容为数字
-  PASS  -p 覆盖的端口 61263 已监听
+  PASS  -p 覆盖的端口 52298 已监听
   PASS  effective.json 记下覆盖端口
   PASS  effective.json 记下覆盖模式
   PASS  status 用 effective.json 而非 config.json 报端口
@@ -669,11 +670,11 @@ svpn CLI 回归（T1）
   PASS  ⑫ pidfile 内容仍是 A
   PASS  ⑫ effective.json 没被失败实例的参数覆盖
   PASS  ⑫ effective.json 逐字节未变
-  PASS  ⑫ 仍然只有 1 个实例
+  PASS  ⑫ 仍然只有 1 个实例（按 ExecutablePath 数）
   PASS  down 能按 pid 正常停掉 A
-  PASS  down 后-p 覆盖端口 61263 连接被拒（10061）
-  PASS  down 后config 端口 62384 连接被拒（10061）
-  PASS  down 后http 端口 62385 连接被拒（10061）
+  PASS  down 后-p 覆盖端口 52298 连接被拒（10061）
+  PASS  down 后config 端口 52210 连接被拒（10061）
+  PASS  down 后http 端口 52211 连接被拒（10061）
   PASS  down 后 pidfile 被清理
   PASS  down 后 effective.json 被清理
 
@@ -681,25 +682,25 @@ svpn CLI 回归（T1）
   PASS  首次 up -b → rc=0
   PASS  首次 up -b → 输出「后台已启动」
   PASS  pidfile 内容为数字
-  PASS  端口 62384 已监听
-  PASS  端口 62385 已监听
+  PASS  端口 52210 已监听
+  PASS  端口 52211 已监听
   PASS  二次 up -b → rc=0
   PASS  二次 up -b → 输出「已在运行」
   PASS  二次 up -b 不换 pid
   PASS  status → rc=0
   PASS  status → 显示运行中且 pid 一致
-  PASS  只有 1 个 svpn 进程在跑
+  PASS  只有 1 个 svpn 进程在跑（按 ExecutablePath 数）
   PASS  down → rc=0
   PASS  down → 输出「已停止」
-  PASS  down 后 62384 连接被拒（10061）
-  PASS  down 后 62385 连接被拒（10061）
+  PASS  down 后 52210 连接被拒（10061）
+  PASS  down 后 52211 连接被拒（10061）
   PASS  二次 down → rc=0
   PASS  二次 down → 输出「没有在运行的实例」
 
 [M] up --node 覆盖后 status 的节点行（⑮）
-  PASS  up -b --node socks5://127.0.0.1:55131 → rc=0
+  PASS  up -b --node socks5://127.0.0.1:52374 → rc=0
   PASS  effective.json upstream_configured == true
-  PASS  effective.json upstream == 127.0.0.1:55131
+  PASS  effective.json upstream == 127.0.0.1:52374
   PASS  status 节点行显示覆盖的节点（不再说「未配置」）
   PASS  status 节点行带 socks5
   PASS  ⑮ 用例收尾：down 成功
@@ -707,10 +708,11 @@ svpn CLI 回归（T1）
 [L] down 兜底提示：没 pidfile 但端口被占（⑩）
   PASS  前置条件：测试进程已占住端口
   PASS  down 无 pidfile → 报「没有在运行的实例」
-  PASS  down 无 pidfile 但 62384 被占 → 提示仍被占用
+  PASS  down 无 pidfile 但 52210 被占 → 提示仍被占用
   PASS  down 此时仍返回 rc=0
 
 PASS 113 / FAIL 0 / SKIP 0（其中硬失败 0、契约待修 0）
+
 ```
 
 ## V1 清单 → 当前状态（全部绿）
@@ -749,6 +751,192 @@ assert pidfile 与 effective.json 都被清理
 
 为什么「只有 http_port 被占」：旧版只查 SOCKS5 端口 → 第二个 up「先成功」→ 子进程 bind HTTP 失败 →
 把在跑实例的 pid 带走。现在 `src/main.cpp:255` 两个端口都查，直接 rc=0 且不碰 pid。
+
+### 并发跑也稳（V1 报的假阳性已修）
+
+V1 和我同时在跑时撞到过一次：
+
+```
+PASS 112 / FAIL 1
+硬失败: - ⑫ 仍然只有 1 个实例
+```
+
+**不是产品问题，是测试自己的缺陷**：两边都把 exe 复制成 `svpn_t1.exe`，我按**映像名**数进程就得到 2。
+现在改成按 **`ExecutablePath` 是否属于本轮 temp 目录**来数（走 `Get-CimInstance Win32_Process`），
+不再用 `tasklist` 的映像名计数。验证方式：**同时起两份 `test_cli.py`**，各自 113/113：
+
+```
+--- 并发实例 A exit=0 ---  PASS 113 / FAIL 0 / SKIP 0
+--- 并发实例 B exit=0 ---  PASS 113 / FAIL 0 / SKIP 0
+```
+
+拿不到进程路径时（没有 powershell）这条会 SKIP，而不是假失败。
+
+## 发布物门禁（可直接进 release notes）
+
+`dist/svpn.exe` 与 dev binary 字节一致（md5 `e634fe15…`、SHA256 `45dcee18…0e6b`、1,678,848 B）。
+脚本支持 `--exe` 指到发布物，直接对交付物做门禁：
+
+```bash
+python tests/test_cli.py --exe dist/svpn.exe
+# 被测二进制: ...\dist\svpn.exe
+# md5=e634fe15067808ccf2ba0dad30d55d97  size=1678848
+# PASS 113 / FAIL 0 / SKIP 0
+```
+
+发布物那一次的完整输出（与 dev binary 一字不差，只有路径不同）：
+
+```
+svpn CLI 回归（T1）
+  被测二进制: D:\LE\AI\wbwrk\svpn-cpp\dist\svpn.exe
+  md5=e634fe15067808ccf2ba0dad30d55d97  size=1678848  mtime=2026-10-25 10:52:59
+  端口: SOCKS 55203 / HTTP 55204（避开 7899/7900）
+  工作目录: C:\Users\zhedu\AppData\Local\Temp\svpn_t1_main__eui6qus
+
+[A] 用法与退出码
+  PASS  无参数 → rc=2
+  PASS  无参数 → 打印用法
+  PASS  未知命令 → rc=2
+  PASS  未知命令 → 报未知命令
+  PASS  --help → rc=0 且打印用法（契约）
+  PASS  -h → rc=0 且打印用法（契约）
+  PASS  help → rc=0 且打印用法（契约）
+  PASS  probe -h → rc=0 且打印用法（不该真跑 probe）
+  PASS  help 文案不出现 pac --write（防文档把空开关写回去）
+  PASS  help 的 pac 行提到 --apply
+
+[B] system（只读，不 on/off）
+  PASS  system show → rc=0
+  PASS  system show → 含 ProxyEnable
+  PASS  system show → 含 ProxyServer/ProxyOverride
+  PASS  system（无子命令）→ rc=0
+  PASS  system（无子命令）→ 等同 show
+
+[C] node set / node clear
+  PASS  node clear → rc=0
+  PASS  node clear → 输出「已清空节点」
+  PASS  node clear → config upstream.host == NODE_HOST
+  PASS  node clear → config upstream.port 回到 1080
+  PASS  node set（无 URL）→ rc=2
+  PASS  node set（无 URL）→ 打印用法
+  PASS  node set 非法 scheme → rc=2
+
+[D] hosts clear --no-elevate（SVPN_HOSTS_FILE 测缝，不碰真实 hosts）
+  PASS  hosts clear --no-elevate → rc=0
+  PASS  hosts clear → 输出「hosts 已清理」
+  PASS  托管块 begin 标记被移除
+  PASS  托管块 end 标记被移除
+  PASS  托管块里的 2 条记录被移除
+  PASS  块外用户行逐行保留
+  PASS  块外字节未变（去掉托管块与尾部分隔空行后逐字节相等）
+  PASS  BOM 被保留
+  PASS  真实 hosts 未被改动
+
+[E] doctor
+  PASS  doctor 缺 config.json → rc=1
+  PASS  doctor 缺 config.json → 提示跑 svpn init
+  PASS  未知键 config → doctor rc≠0
+  PASS  未知键 config → 有一行 [!] 同时点名 config.json 与 broken
+  PASS  只写部分已知键（缺键）→ doctor rc=0
+  PASS  只写部分已知键 → 没发现问题
+  PASS  _note 等下划线键被容忍 → doctor rc=0
+  PASS  下划线键不被当成未知键点名
+  PASS  真语法错误 config → doctor rc=1
+  PASS  真语法错误 config → 有一行 [!] 说明 config.json 解析失败
+
+[F] probe --json
+  PASS  probe --lenient → rc ∈ {0,1}
+  PASS  probe --json → 表格不混进 stdout
+  PASS  probe --json → stdout 整体可 json.loads（契约）
+  PASS  probe --json → 含 rows 数组
+  PASS  probe --json → rows 有 9 个端点
+  PASS  probe --json → 含 ok/unusable 字段
+
+[J] probe --lenient 的语义不变量（④）
+    strict : 直连 7 / 需节点 2 / 死 0 / 不可用 2  rc=1
+    lenient: 直连 6 / 需节点 3 / 死 0 / 不可用 3  rc=0
+  PASS  每轮都有 9 个端点计入桶
+  PASS  D（当前不可用）== B（需节点）+ C（死端点）
+  PASS  strict rc == (D>0)
+  PASS  lenient rc == (C>0)
+  PASS  lenient 不比 strict 更严（rc_l <= rc_s）
+  PASS  --node none 下死端点恒为 0（直连失败记「需节点」）
+
+[G] pac（语法 + 分流判定）
+  PASS  pac → rc=0
+  PASS  pac 文件已生成 runtime/svpn.pac
+  PASS  PAC 里代理串是 SOCKS5 127.0.0.1:<端口>
+  PASS  PAC 是合法 JS（new Function 不抛）
+    判定: {"store.steampowered.com": "SOCKS5 127.0.0.1:55203; DIRECT", "www.baidu.com": "DIRECT", "example.org": "DIRECT", "notsteam.example.com": "DIRECT", "steampowered.com.evil.cn": "DIRECT"}
+  PASS  store.steampowered.com → SOCKS5…; DIRECT
+  PASS  www.baidu.com → DIRECT
+  PASS  example.org → DIRECT
+  PASS  notsteam.example.com → DIRECT
+  PASS  steampowered.com.evil.cn → DIRECT
+
+[K] cdn 实测列格式（⑧）
+  PASS  cdn 行至少 5 列（域名/最优IP/握手/实测/候选）
+  PASS  --no-bench 时实测列是 '-'（不是 0.00MB/s）
+  PASS  实测列格式合法（'-' 或 N.NNMB/s）
+
+[H] up -p/-m 覆盖 + ⑫ 失败的 up 不得抢删在跑实例的 pid
+  PASS  up -b -p 55286 -m blacklist → rc=0
+  PASS  up -b -p → 输出「后台已启动」
+  PASS  pidfile 已生成且内容为数字
+  PASS  -p 覆盖的端口 55286 已监听
+  PASS  effective.json 记下覆盖端口
+  PASS  effective.json 记下覆盖模式
+  PASS  status 用 effective.json 而非 config.json 报端口
+  PASS  status 报 模式 blacklist（来自 -m 覆盖）
+  PASS  ⑫ 二次 up -b（端口冲突）→ rc=0
+  PASS  ⑫ 二次 up -b → 输出「已在运行」
+  PASS  ⑫ pidfile 没被删掉
+  PASS  ⑫ pidfile 内容仍是 A
+  PASS  ⑫ effective.json 没被失败实例的参数覆盖
+  PASS  ⑫ effective.json 逐字节未变
+  PASS  ⑫ 仍然只有 1 个实例（按 ExecutablePath 数）
+  PASS  down 能按 pid 正常停掉 A
+  PASS  down 后-p 覆盖端口 55286 连接被拒（10061）
+  PASS  down 后config 端口 55203 连接被拒（10061）
+  PASS  down 后http 端口 55204 连接被拒（10061）
+  PASS  down 后 pidfile 被清理
+  PASS  down 后 effective.json 被清理
+
+[I] up -b → up -b → status → down（必须同一条命令内跑完）
+  PASS  首次 up -b → rc=0
+  PASS  首次 up -b → 输出「后台已启动」
+  PASS  pidfile 内容为数字
+  PASS  端口 55203 已监听
+  PASS  端口 55204 已监听
+  PASS  二次 up -b → rc=0
+  PASS  二次 up -b → 输出「已在运行」
+  PASS  二次 up -b 不换 pid
+  PASS  status → rc=0
+  PASS  status → 显示运行中且 pid 一致
+  PASS  只有 1 个 svpn 进程在跑（按 ExecutablePath 数）
+  PASS  down → rc=0
+  PASS  down → 输出「已停止」
+  PASS  down 后 55203 连接被拒（10061）
+  PASS  down 后 55204 连接被拒（10061）
+  PASS  二次 down → rc=0
+  PASS  二次 down → 输出「没有在运行的实例」
+
+[M] up --node 覆盖后 status 的节点行（⑮）
+  PASS  up -b --node socks5://127.0.0.1:53908 → rc=0
+  PASS  effective.json upstream_configured == true
+  PASS  effective.json upstream == 127.0.0.1:53908
+  PASS  status 节点行显示覆盖的节点（不再说「未配置」）
+  PASS  status 节点行带 socks5
+  PASS  ⑮ 用例收尾：down 成功
+
+[L] down 兜底提示：没 pidfile 但端口被占（⑩）
+  PASS  前置条件：测试进程已占住端口
+  PASS  down 无 pidfile → 报「没有在运行的实例」
+  PASS  down 无 pidfile 但 55203 被占 → 提示仍被占用
+  PASS  down 此时仍返回 rc=0
+
+PASS 113 / FAIL 0 / SKIP 0（其中硬失败 0、契约待修 0）
+```
 
 ## ④ 写成不变量，不写死 rc
 

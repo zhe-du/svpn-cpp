@@ -1,6 +1,8 @@
 # 编译 svpn（C++ 版）
 
-产物是**单个静态链接的 `svpn.exe`**（实测约 1.6MB），目标机不需要装 MinGW 运行库、不需要 Python、不需要 .NET。
+产物是**两个静态链接的可执行文件**（各约 1.7MB）：`svpn.exe`（控制台，命令行 + `svpn gui`）与
+`svpn-gui.exe`（窗口子系统，双击不弹控制台）。两者是同一份源码、同一套逻辑，只是子系统不同；
+目标机不需要装 MinGW 运行库、不需要 Python、不需要 .NET。
 
 ---
 
@@ -52,7 +54,7 @@ svpn.exe -v
 应输出：
 
 ```
-1.1.0
+1.1.1
 ```
 
 ---
@@ -100,16 +102,21 @@ undefined reference to `WinMain'
 
 ## 5. `build.cmd` 做什么
 
-双击或 `cmd /c build.cmd` 即可。它按顺序做四件事：
+双击或 `cmd /c build.cmd` 即可。它按顺序做五件事：
 
-1. 定位编译器（本机路径 → `PATH` 回落），打印 `[i] compiler: ...`
+1. 定位编译器（本机路径 `D:\LE\AI\tools\mingw64\bin\g++.exe` → `PATH` 回落），打印 `[i] compiler: ...`
 2. 收集 `src\*.cpp` 全量文件列表；一个都没有就 `exit /b 2`
-3. 用上面那条完整命令编译出根目录的 `svpn.exe`（库列表含 `-ldnsapi -lwininet`；少这两个会报 `DnsFlushResolverCache` / `InternetSetOptionW` 未定义，见第 6 节）
-4. 打印产物绝对路径与字节数：`[+] built D:\...\svpn.exe 1672192 bytes`
+3. **第一趟**：用同一套 `FLAGS + LIBS` 加 `-mconsole` 编出 `svpn.exe`，打印 `[1/2] svpn.exe (console, CLI + "svpn gui")`
+4. **第二趟**：同样的源码加 `-mwindows -DSVPN_GUI_SUBSYSTEM` 编出 `svpn-gui.exe`，打印 `[2/2] svpn-gui.exe (windowed, no console flash)`
+5. 打印两个产物的绝对路径与字节数：`[+] built D:\...\svpn.exe 1761792 bytes`（数字随版本变）
 
-失败时打印 `[x] build failed: <退出码>` 并原样返回该退出码，方便脚本判断。
+两趟用的是**同一份源码**，只有入口子系统与那个宏不同，所以两个 exe 的行为完全一致——GUI 版也不会另有一套逻辑。
+
+失败时按阶段分别打印 `[x] console build failed` 或 `[x] gui build failed`，并原样返回非 0 退出码，方便脚本判断。
 
 > `build.cmd` 里会 `mkdir build`，但当前编译是「一步到 exe」，不落 `.o`。`build\` 只是历史产物目录，空着不影响编译，可以删。
+>
+> 库列表含 `-ldnsapi -lwininet`（DoH 与系统代理要用；少这两个会报 `DnsFlushResolverCache` / `InternetSetOptionW` 未定义），GUI 还要 `-lcomctl32 -lgdi32`。
 
 ---
 
@@ -141,7 +148,7 @@ undefined reference to `WinMain'
 :: 1. 编译器在不在、版本够不够
 D:\LE\AI\tools\mingw64\bin\g++.exe --version
 
-:: 2. 源文件齐不齐（应为 13 个 .cpp + 1 个 .hpp）
+:: 2. 源文件齐不齐（应为 14 个 .cpp + 1 个 .hpp）
 dir /b src\*.cpp
 dir /b src\*.hpp
 
