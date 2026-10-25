@@ -646,6 +646,45 @@ def test_cdn_tput(ws):
           tput == "-" or re.fullmatch(r"\d+\.\d{2}MB/s", tput), tput)
 
 
+# ---------------------------------------------------------------- M. status 节点行（⑮）
+def test_node_override(ws):
+    """⑮：`up -b --node` 的覆盖必须体现在 effective.json 与 status 的节点行。
+
+    此前 status 只读 config.json，节点行永远显示「未配置（纯直连）」。
+    """
+    print("\n[M] up --node 覆盖后 status 的节点行（⑮）")
+    alt = pick_free_port()
+    node_port = pick_free_port()
+    used = {SOCKS_PORT, HTTP_PORT, alt}
+    while node_port in used:
+        node_port = pick_free_port()
+    pid_path = os.path.join(ws, "runtime", "svpn.pid")
+    eff_path = os.path.join(ws, "runtime", "effective.json")
+    spec = f"127.0.0.1:{node_port}"
+
+    rc, out = run(ws, ["up", "-b", "-p", str(alt),
+                       "--node", f"socks5://{spec}"], timeout=90)
+    check(f"up -b --node socks5://{spec} → rc=0", rc == 0, f"rc={rc} out={out.strip()[:200]}")
+    if wait_pidfile(pid_path) is None:
+        check("节点覆盖用例：pidfile 已生成", False, pid_path)
+        return
+
+    eff = read_json(eff_path) or {}
+    check("effective.json upstream_configured == true",
+          eff.get("upstream_configured") is True, str(eff)[:160])
+    check(f"effective.json upstream == {spec}", eff.get("upstream") == spec, str(eff)[:160])
+
+    rc, out = run(ws, ["status"])
+    check("status 节点行显示覆盖的节点（不再说「未配置」）",
+          spec in out and "未配置" not in out, out.strip()[:240])
+    check("status 节点行带 socks5", "socks5" in out, out.strip()[:240])
+
+    rc, out = run(ws, ["down"], timeout=60)
+    check("⑮ 用例收尾：down 成功", rc == 0 and ("已停止" in out or "没有在运行的实例" in out),
+          out.strip()[:160])
+    wait_closed(alt)
+
+
 # ---------------------------------------------------------------- L. down 兜底提示
 def test_down_port_hint(ws):
     """⑩ 不造「pid 属于别人」的场景（有误杀风险），改测用户可见的兜底提示。"""
@@ -719,6 +758,7 @@ def main():
             test_cdn_tput(ws)
         test_up_override(ws)
         test_lifecycle(ws)
+        test_node_override(ws)
         test_down_port_hint(ws)
     finally:
         # 兜底：中途炸了也别留下常驻进程
