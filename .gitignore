@@ -28,3 +28,7 @@ tests/err.txt
 # 团队协作临时产物（含本机 hosts 备份等）
 _crew/tmp_*/
 _crew/**/runtime/
+
+# 发布产物：二进制不进源码树，靠 MANIFEST + tag 追溯
+# （dist/ 里既有单 exe 副本，也有 zip 包；两者都不入库）
+dist/
