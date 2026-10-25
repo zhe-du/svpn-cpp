@@ -138,7 +138,7 @@ def main():
     if gver_2:
         A("                %s" % gver_2)
     A("目标平台        x86_64-w64-mingw32 / Windows 10·11 x64")
-    A("构建脚本        build.cmd（一趟编两个产物，-static -s，零 DLL 依赖）")
+    A("构建脚本        build.cmd（一趟编两个产物，-static -s，不依赖第三方运行库 DLL）")
     A("源码 commit     %s" % commit)
     A("")
     A("两个 exe 由同一份源码编译，只有入口子系统不同（-mconsole / -mwindows），")
